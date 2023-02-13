@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 10
+    },
+    "salary": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "equity": {
+      "type": "numeric",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": []
+}

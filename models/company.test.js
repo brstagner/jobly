@@ -1,0 +1,276 @@
+"use strict";
+
+const db = require("../db.js");
+const { BadRequestError, NotFoundError } = require("../expressError");
+const Company = require("./company.js");
+const {
+  commonBeforeAll,
+  commonBeforeEach,
+  commonAfterEach,
+  commonAfterAll,
+} = require("./_testCommon");
+
+beforeAll(commonBeforeAll);
+beforeEach(commonBeforeEach);
+afterEach(commonAfterEach);
+afterAll(commonAfterAll);
+
+/************************************** create */
+
+describe("create", function () {
+  const newCompany = {
+    handle: "new",
+    name: "New",
+    description: "New Description",
+    numEmployees: 1,
+    logoUrl: "http://new.img",
+  };
+
+// Add a company
+  test("works", async function () {
+    let company = await Company.create(newCompany);
+    expect(company).toEqual(newCompany);
+
+    const result = await db.query(
+          `SELECT handle, name, description, num_employees, logo_url
+           FROM companies
+           WHERE handle = 'new'`);
+    expect(result.rows).toEqual([
+      {
+        handle: "new",
+        name: "New",
+        description: "New Description",
+        num_employees: 1,
+        logo_url: "http://new.img",
+      },
+    ]);
+  });
+
+// Try adding duplicate company (should fail)
+  test("bad request with dupe", async function () {
+    try {
+      await Company.create(newCompany);
+      await Company.create(newCompany);
+      fail();
+    } catch (err) {
+      expect(err instanceof BadRequestError).toBeTruthy();
+    }
+  });
+});
+
+/************************************** findAll */
+
+describe("findAll", function () {
+
+// Verify all companies returned when no parameters are passed
+  test("works: no filter", async function () {
+    let companies = await Company.findAll({name:"%undefined%"});
+    expect(companies).toEqual([
+      {
+        handle: "c1",
+        name: "C1",
+        description: "Desc1",
+        numEmployees: 1,
+        logoUrl: "http://c1.img",
+      },
+      {
+        handle: "c2",
+        name: "C2",
+        description: "Desc2",
+        numEmployees: 2,
+        logoUrl: "http://c2.img",
+      },
+      {
+        handle: "c3",
+        name: "C3",
+        description: "Desc3",
+        numEmployees: 3,
+        logoUrl: "http://c3.img",
+      },
+    ]);
+  });
+
+// Verify relevant companies returned when name parameter is passed
+  test("works: name filter", async function () {
+    let companies = await Company.findAll({name:"%C1%"});
+      expect(companies).toEqual([
+      {
+        handle: "c1",
+        name: "C1",
+        description: "Desc1",
+        numEmployees: 1,
+        logoUrl: "http://c1.img",
+      }])
+  });
+
+// Verify relevant companies returned when minEmployees parameter is passed
+  test("works: minEmployees filter", async function () {
+    let companies = await Company.findAll({name:"%undefined%",minEmployees:2});
+      expect(companies).toEqual([
+      {
+        handle: "c2",
+        name: "C2",
+        description: "Desc2",
+        numEmployees: 2,
+        logoUrl: "http://c2.img",
+        },
+      {
+        handle: "c3",
+        name: "C3",
+        description: "Desc3",
+        numEmployees: 3,
+        logoUrl: "http://c3.img",
+      }])
+  });
+
+// Verify relevant companies returned when maxEmployees parameter is passed
+  test("works: maxEmployees filter", async function () {
+    let companies = await Company.findAll({name:"%undefined%",maxEmployees:2});
+      expect(companies).toEqual([
+      {
+        handle: "c1",
+        name: "C1",
+        description: "Desc1",
+        numEmployees: 1,
+        logoUrl: "http://c1.img",
+        },
+      {
+        handle: "c2",
+        name: "C2",
+        description: "Desc2",
+        numEmployees: 2,
+        logoUrl: "http://c2.img",
+      }])
+  });
+});
+
+
+/************************************** get */
+
+describe("get", function () {
+
+// Gets appropriate company when handle is passed
+  test("works", async function () {
+    let company = await Company.get("c1");
+    expect(company).toEqual({
+      handle: "c1",
+      name: "C1",
+      description: "Desc1",
+      numEmployees: 1,
+      logoUrl: "http://c1.img",
+    });
+  });
+
+// Throws error when nonexistent company handle is passed
+  test("not found if no such company", async function () {
+    try {
+      await Company.get("nope");
+      fail();
+    } catch (err) {
+      expect(err instanceof NotFoundError).toBeTruthy();
+    }
+  });
+});
+
+/************************************** update */
+
+describe("update", function () {
+  const updateData = {
+    name: "New",
+    description: "New Description",
+    numEmployees: 10,
+    logoUrl: "http://new.img",
+  };
+
+// Updates existing company with valid data
+  test("works", async function () {
+    let company = await Company.update("c1", updateData);
+    expect(company).toEqual({
+      handle: "c1",
+      ...updateData,
+    });
+
+    const result = await db.query(
+          `SELECT handle, name, description, num_employees, logo_url
+           FROM companies
+           WHERE handle = 'c1'`);
+    expect(result.rows).toEqual([{
+      handle: "c1",
+      name: "New",
+      description: "New Description",
+      num_employees: 10,
+      logo_url: "http://new.img",
+    }]);
+  });
+
+// Updates existing company when null values passed for nullable columns
+  test("works: null fields", async function () {
+    const updateDataSetNulls = {
+      name: "New",
+      description: "New Description",
+      numEmployees: null,
+      logoUrl: null,
+    };
+
+    let company = await Company.update("c1", updateDataSetNulls);
+    expect(company).toEqual({
+      handle: "c1",
+      ...updateDataSetNulls,
+    });
+
+    const result = await db.query(
+          `SELECT handle, name, description, num_employees, logo_url
+           FROM companies
+           WHERE handle = 'c1'`);
+    expect(result.rows).toEqual([{
+      handle: "c1",
+      name: "New",
+      description: "New Description",
+      num_employees: null,
+      logo_url: null,
+    }]);
+  });
+
+// Throws error when attempting to update nonexistent company
+  test("not found if no such company", async function () {
+    try {
+      await Company.update("nope", updateData);
+      fail();
+    } catch (err) {
+      expect(err instanceof NotFoundError).toBeTruthy();
+    }
+  });
+
+// Throws error when attempting to update existing company with no data
+  test("bad request with no data", async function () {
+    try {
+      await Company.update("c1", {});
+      fail();
+    } catch (err) {
+      expect(err instanceof BadRequestError).toBeTruthy();
+    }
+  });
+});
+
+/************************************** remove */
+
+describe("remove", function () {
+
+// Deletes existing company
+  test("works", async function () {
+    await Company.remove("c1");
+    const res = await db.query(
+        "SELECT handle FROM companies WHERE handle='c1'");
+    expect(res.rows.length).toEqual(0);
+  });
+
+// Throws error when attempting to delete nonexistent company
+  test("not found if no such company", async function () {
+    try {
+      await Company.remove("nope");
+      fail();
+    } catch (err) {
+      expect(err instanceof NotFoundError).toBeTruthy();
+    }
+  });
+});
